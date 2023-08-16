@@ -1,154 +1,199 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import LabelBinarizer
 import streamlit as st
-import re
-st.set_page_config(layout="wide")
-
-st.write("""
-<div style='text-align:center'>
-    <h1 style='color:#009999;'>Industrial Copper Modeling Application</h1>
-</div>
-""", unsafe_allow_html=True)
-
-tab1, tab2 = st.tabs(["PREDICT SELLING PRICE", "PREDICT STATUS"]) 
-with tab1:    
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import r2_score
+from sklearn.metrics import accuracy_score
+from scipy.stats.mstats import winsorize
+from sklearn.preprocessing import LabelEncoder
+import category_encoders as ce
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import warnings
+warnings.filterwarnings('ignore')
+# =============================================================================
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+# import catboostimport sweetviz
+# import xgboost
+# =============================================================================
+df = pd.read_csv("")  # Reading the data from csv file
+#df.columns
+#df.head()
+#df.describe()
+def Preprocessing(df):  
+        # id column is unique and not useful to our analysis
+        df.drop(columns = ["id"], axis = 1, inplace = True)
+        #cleaning the columns material_ref and quantity tons
+        a = df["material_ref"].str.startswith("0000000000")
+        b = (a==True)
+        df["material_ref"][b] = np.NAN
+        df["quantity tons"].values[173086] = 0
+        df["quantity tons"] = pd.to_numeric(df["quantity tons"])
         
-
-        # Define the possible values for the dropdown menus
-        status_options = ['Won', 'Draft', 'To be approved', 'Lost', 'Not lost for AM', 'Wonderful', 'Revised', 'Offered', 'Offerable']
-        item_type_options = ['W', 'WI', 'S', 'Others', 'PL', 'IPL', 'SLAWR']
-        country_options = [28., 25., 30., 32., 38., 78., 27., 77., 113., 79., 26., 39., 40., 84., 80., 107., 89.]
-        application_options = [10., 41., 28., 59., 15., 4., 38., 56., 42., 26., 27., 19., 20., 66., 29., 22., 40., 25., 67., 79., 3., 99., 2., 5., 39., 69., 70., 65., 58., 68.]
-        product=['611112', '611728', '628112', '628117', '628377', '640400', '640405', '640665', 
-                     '611993', '929423819', '1282007633', '1332077137', '164141591', '164336407', 
-                     '164337175', '1665572032', '1665572374', '1665584320', '1665584642', '1665584662', 
-                     '1668701376', '1668701698', '1668701718', '1668701725', '1670798778', '1671863738', 
-                     '1671876026', '1690738206', '1690738219', '1693867550', '1693867563', '1721130331', '1722207579']
-
-        # Define the widgets for user input
-        with st.form("my_form"):
-            col1,col2,col3=st.columns([5,2,5])
-            with col1:
-                st.write(' ')
-                status = st.selectbox("Status", status_options,key=1)
-                item_type = st.selectbox("Item Type", item_type_options,key=2)
-                country = st.selectbox("Country", sorted(country_options),key=3)
-                application = st.selectbox("Application", sorted(application_options),key=4)
-                product_ref = st.selectbox("Product Reference", product,key=5)
-            with col3:               
-                st.write( f'<h5 style="color:rgb(0, 153, 153,0.4);">NOTE: Min & Max given for reference, you can enter any value</h5>', unsafe_allow_html=True )
-                quantity_tons = st.text_input("Enter Quantity Tons (Min:611728 & Max:1722207579)")
-                thickness = st.text_input("Enter thickness (Min:0.18 & Max:400)")
-                width = st.text_input("Enter width (Min:1, Max:2990)")
-                customer = st.text_input("customer ID (Min:12458, Max:30408185)")
-                submit_button = st.form_submit_button(label="PREDICT SELLING PRICE")
-                st.markdown("""
-                    <style>
-                    div.stButton > button:first-child {
-                        background-color: #009999;
-                        color: white;
-                        width: 100%;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
+        cols = ['quantity tons', 'customer', 'country', 'application', 'thickness', 'width', 'selling_price'  ,'status', 'item type', 'material_ref', 'product_ref']
+        cont_cols = ['quantity tons', 'customer', 'country', 'application', 'thickness', 'width', 'selling_price']
+        cat_cols = [ 'status', 'item type', 'material_ref', 'product_ref']
     
-            flag=0 
-            pattern = "^(?:\d+|\d*\.\d+)$"
-            for i in [quantity_tons,thickness,width,customer]:             
-                if re.match(pattern, i):
-                    pass
-                else:                    
-                    flag=1  
-                    break
-            
-        if submit_button and flag==1:
-            if len(i)==0:
-                st.write("please enter a valid number space not allowed")
-            else:
-                st.write("You have entered an invalid value: ",i)  
-             
-        if submit_button and flag==0:
-            
-            import pickle
-            with open(r"source/model.pkl", 'rb') as file:
-                loaded_model = pickle.load(file)
-            with open(r'source/scaler.pkl', 'rb') as f:
-                scaler_loaded = pickle.load(f)
+        # Treating null values
+        for i in cols:
+             if i == 'thickness':
+                  si = SimpleImputer(strategy = 'median')       
+                  df[i] = si.fit_transform(np.array(df[i]).reshape(-1,1))
+             elif i in cat_cols:
+                  si = SimpleImputer(strategy = 'most_frequent')       
+                  df[i] = si.fit_transform(np.array(df[i]).reshape(-1,1))
+             else:
+                  si = SimpleImputer(strategy = 'mean')
+                  df[i] = si.fit_transform(np.array(df[i]).reshape(-1,1))
+        df = df.dropna()
+        for i in cols:
+            if i in cont_cols:
+                    print(i, df[i].apply(lambda x : isinstance(x, float) or isinstance(x, int)).all())
+        
+        y = df["selling_price"]
+        y[y <= 0] = 1e-8
+        y = np.log(np.array(y))
+        y[y == np.inf] = np.nan
+        y[y == -np.inf] = np.nan
+        si = SimpleImputer(strategy = 'mean')
+        y = si.fit_transform(np.array(y).reshape(-1,1))
 
-            with open(r"source/t.pkl", 'rb') as f:
-                t_loaded = pickle.load(f)
+        #df["selling_price"].skew()
+        # winsorizing to reduce skewness
+        df["quantity tons"] = winsorize(df["quantity tons"], limits = [0.1, 0.1])
+        df["thickness"] = winsorize(df["thickness"], limits = [0.1, 0.1])
+        for col in ['quantity tons', 'width', 'selling_price']:
+            df[col] = winsorize(df[col], limits=[0.1, 0.1])
+        #df[['quantity tons','width', 'selling_price']].plot.box(figsize = (10,5))
+        #st.write(len(df)) # 181674
+        # creating a new feature delivery time and deleting the features item date and delivery date
+        df['item_date'] = pd.to_datetime(df['item_date'].astype(str).str.rstrip('.0'), format='%Y%m%d', errors='coerce')
+        df['delivery date'] = pd.to_datetime(df['delivery date'].astype(str).str.rstrip('.0'), format='%Y%m%d', errors='coerce')
+        df.dropna(subset=['item_date','delivery date'], inplace=True)
+        df['Delivery_Time'] = (df['delivery date'] - df['item_date']).dt.total_seconds()
+        df = df.drop(columns = ["item_date", "delivery date"], axis = 1)
+        #st.write(len(df)) # 181667
 
-            with open(r"source/s.pkl", 'rb') as f:
-                s_loaded = pickle.load(f)
+        # EDA
+# =============================================================================
+#         sns.heatmap(df.corr()).plot()
+#         my_report = sweetviz.analyze([df, "Train"], target_feat = "selling_price")
+#         my_report.show_html()
+#         df.plot(kind = "box", subplots = True, figsize = (12,5), fontsize = 8)
+#         df[['quantity tons','width', 'selling_price']].plot.box(figsize = (10,5))
+#         df["selling_price"].plot(kind = 'hist')
+# =============================================================================
+        # Taking a copy of the dataframe
+        copy = df
+        return(df)
+def Regression(df1, new):
+        #encoding the categorical features of the dataset df1
+        target_en = ce.TargetEncoder(cols = [ 'status', 'item type', 'material_ref', 'product_ref'])
+        b = df1["selling_price"]
+        df1 = target_en.fit_transform(df1.drop(columns = ["selling_price"]), df1["selling_price"])
+        df1["selling_price"] = b
+        
+        #encoding the categorical features of the dataset new
+        b = new["selling_price"]
+        new = target_en.fit_transform(new.drop(columns = ["selling_price"]), new["selling_price"])
+        new["selling_price"] = b
+        
+        # splitting the data
+        x = df1.iloc[:, :11]
+        y =  df1['selling_price']  
+        new = new.drop(columns = ["selling_price"], axis = 1)
+        x_train, x_test, y_train, y_test = train_test_split(x, y,test_size = 0.2,  random_state = 5)
+        
+        # scaling the data
+        scaler = StandardScaler()
+        # Fit the scaler on the training data
+        if new.shape[0] > 0:
+                x = scaler.fit(x)
+                new = scaler.transform(new)
+        else:
+                st.write("You have given invalid values. Please check again!!")
+        # building machine learning models using algorithms
+        from sklearn.ensemble import RandomForestRegressor 
+        rf = RandomForestRegressor()
+        rf.fit(x_train, y_train)
+        #print(r2_score(rf.predict(x_test), y_test))
+        c = rf.predict(new[:])
+        return(c)
+#from collections import Counter
+#Counter(copy["status"])
+     
+def Classification(copy, new1):  
+        new1 = new1.drop(columns = ["status"], axis = 1)
+        # setting the status to either won or lost
+        for i in range(len(copy["status"])):
+            if copy["status"].values[i] not in ["Won", "Lost"]:
+                copy["status"].values[i] = np.nan
+        copy = copy.dropna()
 
-            new_sample= np.array([[np.log(float(quantity_tons)),application,np.log(float(thickness)),float(width),country,float(customer),int(product_ref),item_type,status]])
-            new_sample_ohe = t_loaded.transform(new_sample[:, [7]]).toarray()
-            new_sample_be = s_loaded.transform(new_sample[:, [8]]).toarray()
-            new_sample = np.concatenate((new_sample[:, [0,1,2, 3, 4, 5, 6,]], new_sample_ohe, new_sample_be), axis=1)
-            new_sample1 = scaler_loaded.transform(new_sample)
-            new_pred = loaded_model.predict(new_sample1)[0]
-            st.write('## :green[Predicted selling price:] ', np.exp(new_pred))
-            
-with tab2: 
-    
-        with st.form("my_form1"):
-            col1,col2,col3=st.columns([5,1,5])
-            with col1:
-                cquantity_tons = st.text_input("Enter Quantity Tons (Min:611728 & Max:1722207579)")
-                cthickness = st.text_input("Enter thickness (Min:0.18 & Max:400)")
-                cwidth = st.text_input("Enter width (Min:1, Max:2990)")
-                ccustomer = st.text_input("customer ID (Min:12458, Max:30408185)")
-                cselling = st.text_input("Selling Price (Min:1, Max:100001015)") 
-              
-            with col3:    
-                st.write(' ')
-                citem_type = st.selectbox("Item Type", item_type_options,key=21)
-                ccountry = st.selectbox("Country", sorted(country_options),key=31)
-                capplication = st.selectbox("Application", sorted(application_options),key=41)  
-                cproduct_ref = st.selectbox("Product Reference", product,key=51)           
-                csubmit_button = st.form_submit_button(label="PREDICT STATUS")
-    
-            cflag=0 
-            pattern = "^(?:\d+|\d*\.\d+)$"
-            for k in [cquantity_tons,cthickness,cwidth,ccustomer,cselling]:             
-                if re.match(pattern, k):
-                    pass
-                else:                    
-                    cflag=1  
-                    break
-            
-        if csubmit_button and cflag==1:
-            if len(k)==0:
-                st.write("please enter a valid number space not allowed")
-            else:
-                st.write("You have entered an invalid value: ",k)  
-             
-        if csubmit_button and cflag==0:
-            import pickle
-            with open(r"source/cmodel.pkl", 'rb') as file:
-                cloaded_model = pickle.load(file)
+        cat_cols = ['item type', 'material_ref', 'product_ref']
+        y = copy["selling_price"]
+        z = new1["selling_price"]
+        # encoding the categorical features using target encoder
+        target_en = ce.TargetEncoder(cols = cat_cols)
+        copy = target_en.fit_transform(copy.drop(columns = ["selling_price"]), copy["selling_price"])
+        new1 = target_en.fit_transform(new1.drop(columns = ["selling_price"]), new1["selling_price"])
+        copy["selling_price"] = y
+        new1["selling_price"] = z
+        # encoding the status feature using label encoder
+        le = LabelEncoder()
+        copy["status"] = le.fit_transform(np.array(copy["status"]).reshape(-1,1))        
+        # splitting the data
+        y = copy["status"]
+        x = copy.drop(columns = ["status"], axis = 1)
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size = 0.2, random_state = 5)
+        # scaling the data
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        # Fit the scaler on the training data
+        if new1.shape[0] > 0:
+                x = scaler.fit(x)
+                new1 = scaler.transform(new1)
+        else:
+                st.write("You have given invalid values. Please check again!!")
+        # building ml model using random forest
+        rf = RandomForestClassifier()
+        rf.fit(x_train, y_train)
+        tr_preds = rf.predict(x_train)
+        te_preds = rf.predict(x_test)
+        #print("acc of tr : ", accuracy_score(tr_preds, y_train))
+        #print("acc of te : ", accuracy_score(te_preds, y_test))
+        c = rf.predict(np.array(new1[:]))
+        return(c)
+# building streamlit application
+st.title("Industrial Copper Modeling")  # Setting the title of the page
+st.header("Regression")
+columns = ['item_date', 'quantity tons', 'customer', 'country', 'status', 'item type', 'application', 'thickness', 'width', 'material_ref', 'product_ref', 'delivery date']
+for column in columns:
+    df.loc[len(df), column] = st.text_input(column)
 
-            with open(r'source/cscaler.pkl', 'rb') as f:
-                cscaler_loaded = pickle.load(f)
-
-            with open(r"source/ct.pkl", 'rb') as f:
-                ct_loaded = pickle.load(f)
-
-            # Predict the status for a new sample
-            # 'quantity tons_log', 'selling_price_log','application', 'thickness_log', 'width','country','customer','product_ref']].values, X_ohe
-            new_sample = np.array([[np.log(float(cquantity_tons)), np.log(float(cselling)), capplication, np.log(float(cthickness)),float(cwidth),ccountry,int(ccustomer),int(product_ref),citem_type]])
-            new_sample_ohe = ct_loaded.transform(new_sample[:, [8]]).toarray()
-            new_sample = np.concatenate((new_sample[:, [0,1,2, 3, 4, 5, 6,7]], new_sample_ohe), axis=1)
-            new_sample = cscaler_loaded.transform(new_sample)
-            new_pred = cloaded_model.predict(new_sample)
-            if new_pred==1:
-                st.write('## :green[The Status is Won] ')
-            else:
-                st.write('## :red[The status is Lost] ')
-                
+submitted1 = st.button("Submit1")
+if submitted1:
+      df = Preprocessing(df)
+      df1 = df.iloc[:(len(df)-1), :]
+      new = df.iloc[(len(df)-1):(len(df)),:]
+      c = Regression(df1, new )  
+      st.write("Predicted selling price is ", c)
+st.header("Classification")
+columns1 = ['item_date', 'quantity tons', 'customer', 'country', 'item type', 'application', 'thickness', 'width', 'material_ref', 'product_ref', 'delivery date', 'selling_price']
+# Assuming you have a DataFrame called df
+df.drop(index=181667, inplace=True)
+for i in columns1:
+    df.loc[len(df), i] = st.text_input(i + " " + "input")
+submitted2 = st.button("Submit2")
+if submitted2:
+      df = Preprocessing(df)
+      copy= df.iloc[:(len(df)-1), :]
+      new1 = df.iloc[(len(df)-1):(len(df)),:]
+      c = Classification(copy, new1 )  
+      if c == 0:
+          st.write('The status is : "Lost"')
+      elif c == 1:
+          st.write('The status is : "Won"')
