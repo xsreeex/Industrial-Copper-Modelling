@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 # import catboostimport sweetviz
 # import xgboost
 # =============================================================================
-df = pd.read_csv("")  # Reading the data from csv file
+df = pd.read_csv("INDUSTRY_COPPER.csv")  # Reading the data from csv file
 #df.columns
 #df.head()
 #df.describe()
