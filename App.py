@@ -13,20 +13,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings('ignore')
-# =============================================================================
-# import matplotlib.pyplot as plt
-# import seaborn as sns
-# import catboostimport sweetviz
-# import xgboost
-# =============================================================================
+
 df = pd.read_csv("Copper_Set.csv")  # Reading the data from csv file
-#df.columns
-#df.head()
-#df.describe()
+
 def Preprocessing(df):  
-        # id column is unique and not useful to our analysis
+
         df.drop(columns = ["id"], axis = 1, inplace = True)
-        #cleaning the columns material_ref and quantity tons
         a = df["material_ref"].str.startswith("0000000000")
         b = (a==True)
         df["material_ref"][b] = np.NAN
@@ -61,32 +53,17 @@ def Preprocessing(df):
         si = SimpleImputer(strategy = 'mean')
         y = si.fit_transform(np.array(y).reshape(-1,1))
 
-        #df["selling_price"].skew()
-        # winsorizing to reduce skewness
         df["quantity tons"] = winsorize(df["quantity tons"], limits = [0.1, 0.1])
         df["thickness"] = winsorize(df["thickness"], limits = [0.1, 0.1])
         for col in ['quantity tons', 'width', 'selling_price']:
             df[col] = winsorize(df[col], limits=[0.1, 0.1])
-        #df[['quantity tons','width', 'selling_price']].plot.box(figsize = (10,5))
-        #st.write(len(df)) # 181674
-        # creating a new feature delivery time and deleting the features item date and delivery date
+   
         df['item_date'] = pd.to_datetime(df['item_date'].astype(str).str.rstrip('.0'), format='%Y%m%d', errors='coerce')
         df['delivery date'] = pd.to_datetime(df['delivery date'].astype(str).str.rstrip('.0'), format='%Y%m%d', errors='coerce')
         df.dropna(subset=['item_date','delivery date'], inplace=True)
         df['Delivery_Time'] = (df['delivery date'] - df['item_date']).dt.total_seconds()
         df = df.drop(columns = ["item_date", "delivery date"], axis = 1)
-        #st.write(len(df)) # 181667
-
-        # EDA
-# =============================================================================
-#         sns.heatmap(df.corr()).plot()
-#         my_report = sweetviz.analyze([df, "Train"], target_feat = "selling_price")
-#         my_report.show_html()
-#         df.plot(kind = "box", subplots = True, figsize = (12,5), fontsize = 8)
-#         df[['quantity tons','width', 'selling_price']].plot.box(figsize = (10,5))
-#         df["selling_price"].plot(kind = 'hist')
-# =============================================================================
-        # Taking a copy of the dataframe
+        
         copy = df
         return(df)
 def Regression(df1, new):
@@ -122,9 +99,7 @@ def Regression(df1, new):
         #print(r2_score(rf.predict(x_test), y_test))
         c = rf.predict(new[:])
         return(c)
-#from collections import Counter
-#Counter(copy["status"])
-     
+
 def Classification(copy, new1):  
         new1 = new1.drop(columns = ["status"], axis = 1)
         # setting the status to either won or lost
